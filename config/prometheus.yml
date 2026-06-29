@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 5s       # Short scrape interval for highly responsive dashboard metrics
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: "api-rate-limiter"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["api:8000"]  # Scraping the API service inside the docker-compose network

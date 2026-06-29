@@ -1,0 +1,87 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7.2-alpine
+    container_name: rate_limiter_redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly yes
+    ports:
+      - "6382:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rate_limiter_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: rate_limiter_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=prod
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - LOG_FILE_PATH=logs/api.json
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rate_limiter_network
+    volumes:
+      - api_logs:/app/logs
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: rate_limiter_dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    environment:
+      - ENV=prod
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - rate_limiter_network
+
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: rate_limiter_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - api
+    networks:
+      - rate_limiter_network
+
+volumes:
+  redis_data:
+    name: rate_limiter_redis_data
+  api_logs:
+    name: rate_limiter_api_logs
+  prometheus_data:
+    name: rate_limiter_prometheus_data
+
+networks:
+  rate_limiter_network:
+    name: rate_limiter_network
+    driver: bridge

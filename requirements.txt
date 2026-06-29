@@ -1,0 +1,28 @@
+# Core API Framework
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# Database & Cache
+redis>=5.0.3
+
+# Dashboard
+streamlit>=1.32.0
+pandas>=2.2.0
+plotly>=5.19.0
+
+# HTTP & Async client
+httpx>=0.27.0
+
+# Observability
+prometheus-client>=0.20.0
+structlog>=24.1.0
+
+# Development, Formatting & Testing
+pytest>=8.1.0
+pytest-asyncio>=0.23.5
+black>=24.2.0
+ruff>=0.3.0
+mypy>=1.9.0
+types-redis>=4.6.0.20240106
