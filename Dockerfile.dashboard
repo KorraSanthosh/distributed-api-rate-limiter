@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code (dashboard + app modules for config integration)
 COPY dashboard ./dashboard
+COPY .streamlit ./.streamlit
 COPY app ./app
 
 # Expose Streamlit default port

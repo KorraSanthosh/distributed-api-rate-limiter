@@ -14,15 +14,27 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Dark Mode / Sleek Dashboard Styling
+# Soft pastel light theme (base theme colours live in .streamlit/config.toml)
 st.markdown(
     """
     <style>
-    .main { background-color: #0F172A; color: #F1F5F9; }
-    .stMetric { background-color: #1E293B; border-radius: 10px; padding: 15px; border: 1px solid #334155; }
-    div[data-testid="metric-container"] { color: #F1F5F9; }
-    h1, h2, h3 { color: #38BDF8 !important; }
-    .stButton>button { background-color: #38BDF8; color: #0F172A; font-weight: bold; border-radius: 5px; }
+    .stApp { background: linear-gradient(135deg, #F3EFFF 0%, #E8F7F2 45%, #FFF1E6 100%); }
+    [data-testid="stSidebar"] { background: linear-gradient(180deg, #E4E9FF 0%, #E3F6EF 100%); }
+    [data-testid="stMetric"], div[data-testid="metric-container"] {
+        background: rgba(255, 255, 255, 0.75); border-radius: 14px; padding: 15px;
+        border: 1px solid #DAD7F5; box-shadow: 0 2px 8px rgba(124, 131, 253, 0.12);
+    }
+    div[data-testid="column"]:nth-of-type(1) [data-testid="stMetric"] { border-top: 4px solid #8FB8FF; }
+    div[data-testid="column"]:nth-of-type(2) [data-testid="stMetric"] { border-top: 4px solid #7ED6B5; }
+    div[data-testid="column"]:nth-of-type(3) [data-testid="stMetric"] { border-top: 4px solid #F5A3A3; }
+    div[data-testid="column"]:nth-of-type(4) [data-testid="stMetric"] { border-top: 4px solid #C3A6F5; }
+    div[data-testid="column"]:nth-of-type(5) [data-testid="stMetric"] { border-top: 4px solid #F7C98B; }
+    h1, h2, h3 { color: #5B63C9 !important; }
+    .stButton>button {
+        background-color: #B9BEFF; color: #2F3358; font-weight: 600;
+        border: none; border-radius: 10px;
+    }
+    .stButton>button:hover { background-color: #A3F0D2; color: #2F3358; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -196,8 +208,8 @@ def main() -> None:
             x="time_bucket",
             y="requests",
             color="status",
-            color_discrete_map={"Allowed": "#10B981", "Rate Limited": "#EF4444"},
-            template="plotly_dark",
+            color_discrete_map={"Allowed": "#5CC8A1", "Rate Limited": "#F28B93"},
+            template="plotly_white",
         )
         fig_traffic.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
@@ -219,9 +231,9 @@ def main() -> None:
             values="count",
             names="status_code",
             color="status_code",
-            color_discrete_map={"200": "#10B981", "429": "#EF4444"},
+            color_discrete_map={"200": "#7ED6B5", "429": "#F5A3A3"},
             hole=0.4,
-            template="plotly_dark",
+            template="plotly_white",
         )
         fig_pie.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
