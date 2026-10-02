@@ -1,6 +1,5 @@
-import asyncio
 import os
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator
 import pytest
 import pytest_asyncio
 import redis.asyncio as aioredis

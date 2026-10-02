@@ -1,5 +1,4 @@
 import argparse
-import asyncio
 from unittest.mock import AsyncMock, patch
 import pytest
 import httpx

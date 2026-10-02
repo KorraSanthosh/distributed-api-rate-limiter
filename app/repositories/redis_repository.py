@@ -1,7 +1,6 @@
 import json
-import time
 import logging
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Tuple, Any
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
 
@@ -75,10 +74,8 @@ class RedisRepository:
 
     async def ping(self) -> bool:
         """Checks Redis server availability."""
-        t0 = time.perf_counter()
         try:
             is_alive = await self.redis.ping()
-            latency = (time.perf_counter() - t0) * 1000
             REDIS_OPERATIONS_TOTAL.labels(operation="ping", status="success").inc()
             # Update connection gauge
             try:

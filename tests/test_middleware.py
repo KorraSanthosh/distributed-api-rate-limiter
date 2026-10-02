@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 import pytest
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request

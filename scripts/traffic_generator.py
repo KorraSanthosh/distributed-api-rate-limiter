@@ -107,11 +107,11 @@ async def worker_ddos(client: httpx.AsyncClient, base_url: str, ips: List[str], 
 
 async def run_traffic_simulator(args: argparse.Namespace) -> None:
     """Main coordinator for starting traffic simulation profiles."""
-    print(f"=== Starting Traffic Simulator ===")
+    print("=== Starting Traffic Simulator ===")
     print(f"Target Host: {args.host}")
     print(f"Mode:        {args.mode.upper()}")
     print(f"Duration:    {args.duration} seconds")
-    print(f"==================================")
+    print("==================================")
 
     # Initialize shared AsyncClient
     limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
