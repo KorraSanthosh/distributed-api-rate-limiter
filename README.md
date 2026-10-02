@@ -1,5 +1,7 @@
 # Distributed API Rate Limiter & Traffic Analyzer
 
+[![CI](https://github.com/KorraSanthosh/distributed-api-rate-limiter/actions/workflows/ci.yml/badge.svg)](https://github.com/KorraSanthosh/distributed-api-rate-limiter/actions/workflows/ci.yml)
+
 A distributed rate limiter and traffic-analytics gateway built with **FastAPI**, **Redis** (Sorted Sets, Lua scripts, Streams), a **React** dashboard, and **Prometheus** metrics, packaged with Docker Compose.
 
 Every request passes through a sliding-window rate limiter backed by Redis, so limits hold across multiple API instances. Allowed *and* blocked requests are streamed to Redis and visualised live.
@@ -75,11 +77,12 @@ distributed-api-rate-limiter/
 │   ├── schemas/          # Pydantic schemas
 │   └── services/         # Rate-limit policies & analytics aggregation
 ├── frontend/             # React + Vite dashboard (nginx Dockerfile included)
+├── .github/workflows/    # CI: backend tests (Python 3.11/3.12), frontend build, Docker build
 ├── dashboard/            # Legacy Streamlit dashboard
 ├── config/               # Prometheus configuration
 ├── scripts/              # Traffic simulator & access-log replay tool
 ├── tests/                # Pytest suite
-└── docs/                 # System design notes
+└── docs/                 # System design notes, AWS deployment guide, screenshots
 ```
 
 ---
@@ -151,6 +154,20 @@ Each log URL is mapped to one of the four API routes by a stable hash, hostnames
 # A local Redis must be running; tests use Redis DB 9
 pytest -v --cov=app tests/
 ```
+
+---
+
+## 🚢 Production deployment
+
+`docker-compose.prod.yml` is a production override: it publishes **only** the web port, keeps the API, Redis,
+Prometheus and Streamlit on the private Docker network, and narrows `TRUSTED_PROXIES` to the nginx container.
+
+```bash
+HTTP_PORT=80 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+```
+
+See [docs/deployment-aws.md](docs/deployment-aws.md) for a step-by-step single-server AWS (EC2) guide, cost
+estimate and security notes.
 
 ---
 
