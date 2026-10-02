@@ -105,3 +105,28 @@ async def test_rate_limiter_sliding_window_eviction() -> None:
     assert count == 2  # Current active request count is 2 (T=1.0 and T=5.1)
     
     await repo.close()
+
+
+@pytest.mark.asyncio
+async def test_pool_exhaustion_waits_instead_of_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With far more concurrent callers than connections, requests must queue, not raise
+    'Too many connections' (which would make the limiter fail open exactly under load)."""
+    import asyncio
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "REDIS_MAX_CONNECTIONS", 3)
+    monkeypatch.setattr(settings, "REDIS_POOL_TIMEOUT", 5.0)
+    repo = RedisRepository()
+    now = time.time()
+    try:
+        results = await asyncio.gather(
+            *[
+                repo.check_rate_limit(f"test_pool:{i}", now, window=10, limit=5, burst_limit=5)
+                for i in range(200)
+            ]
+        )
+    finally:
+        await repo.close()
+    assert len(results) == 200
+    assert all(allowed for allowed, _, _ in results)  # each key is used once -> all allowed

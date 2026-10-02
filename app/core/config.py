@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
     REDIS_TIMEOUT: float = 2.0
     REDIS_MAX_CONNECTIONS: int = 50
+    # How long a request waits for a free pooled connection before giving up (then fails open)
+    REDIS_POOL_TIMEOUT: float = 2.0
 
     # Rate Limiting Configurations (Defaults)
     # The default window size in seconds

@@ -15,13 +15,15 @@ class RedisRepository:
     """Encapsulates data access and atomic operations on Redis."""
 
     def __init__(self) -> None:
-        # Create connection pool
-        self.pool = aioredis.ConnectionPool(
+        # Blocking pool: when all connections are busy, callers wait (up to REDIS_POOL_TIMEOUT)
+        # instead of failing immediately, so bursts do not make the limiter fail open.
+        self.pool = aioredis.BlockingConnectionPool(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD,
             max_connections=settings.REDIS_MAX_CONNECTIONS,
+            timeout=settings.REDIS_POOL_TIMEOUT,
             socket_timeout=settings.REDIS_TIMEOUT,
             decode_responses=True,  # Automatically decode bytes to str
         )

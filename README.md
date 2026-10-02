@@ -183,7 +183,8 @@ All settings are environment variables (a `.env` file is also read). Every one h
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis location |
 | `REDIS_DB` | `0` (`9` in tests) | Redis database |
 | `REDIS_PASSWORD` | unset | Redis auth |
-| `REDIS_TIMEOUT` / `REDIS_MAX_CONNECTIONS` | `2.0` / `50` | Connection pool |
+| `REDIS_TIMEOUT` / `REDIS_MAX_CONNECTIONS` | `2.0` / `50` | Socket timeout / pool size |
+| `REDIS_POOL_TIMEOUT` | `2.0` | Seconds a request waits for a free pooled connection before failing open |
 | `TRUSTED_PROXIES` | empty | Proxies whose forwarded-IP headers are trusted |
 | `RATE_LIMIT_WINDOW_SECONDS` / `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_BURST_LIMIT` | `60` / `60` / `80` | Default policy for unlisted paths |
 | `LOG_LEVEL` / `LOG_FILE_PATH` | `INFO` / `logs/app.json` | Logging |
