@@ -10,7 +10,7 @@ import EndpointsPanel from "./components/EndpointsPanel.jsx";
 import ClientsPanel from "./components/ClientsPanel.jsx";
 import BlockedPanel from "./components/BlockedPanel.jsx";
 import LogTable from "./components/LogTable.jsx";
-import { ErrorBanner, Skeleton } from "./components/States.jsx";
+import { EmptyHint, ErrorBanner, Skeleton } from "./components/States.jsx";
 
 export default function App() {
   const [windowSeconds, setWindowSeconds] = useState(60);
@@ -54,6 +54,8 @@ export default function App() {
           <Skeleton />
         ) : data ? (
           <>
+            {data.total_requests === 0 && data.recent.length === 0 && data.recent_blocked.length === 0 && <EmptyHint />}
+
             <div className="kpi-grid">
               <KpiCard label="Requests / sec" tone="blue" icon={Activity} value={data.requests_per_second}
                        decimals={2} hint={`${data.total_requests.toLocaleString()} in last ${Math.round(data.effective_window_seconds)}s`}
