@@ -1,0 +1,19 @@
+# Keep the build context small: only app code and requirements are needed by the images.
+.git
+venv/
+.venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+logs/
+node_modules/
+frontend/
+tests/
+docs/
+scripts/
+*.pdf
+.DS_Store
