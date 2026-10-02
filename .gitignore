@@ -26,3 +26,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+
+# Personal interview-prep material (contains a private weak-points list; do not publish)
+Interview_Prep*.pdf
