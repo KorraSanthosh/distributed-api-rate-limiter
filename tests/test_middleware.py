@@ -1,9 +1,13 @@
+import asyncio
 from unittest.mock import AsyncMock, patch
 import pytest
-from fastapi import FastAPI
+import redis.asyncio as aioredis
+from fastapi import FastAPI, Request
 from httpx import AsyncClient
 from redis.exceptions import ConnectionError
 
+from app.core.config import settings
+from app.middleware.rate_limiter import RateLimiterMiddleware
 from app.repositories.redis_repository import RedisRepository
 
 
@@ -82,3 +86,108 @@ async def test_middleware_fails_open_on_redis_outage(
         # Request should succeed despite database outage (fail-open)
         assert response.status_code == 200
         assert "X-Request-ID" in response.headers
+
+
+async def _wait_for_stream_entries(
+    redis_client: "aioredis.Redis", minimum: int, timeout: float = 2.0
+) -> list:
+    """Polls the analytics stream until it holds `minimum` entries (logging is async)."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        entries = await redis_client.xrange("api_traffic_stream")
+        if len(entries) >= minimum or asyncio.get_event_loop().time() > deadline:
+            return entries
+        await asyncio.sleep(0.05)
+
+
+@pytest.mark.asyncio
+async def test_blocked_requests_are_logged_to_analytics_stream(
+    async_client: AsyncClient, redis_test_client: "aioredis.Redis"
+) -> None:
+    """429 responses must reach the analytics stream (AnalyticsMiddleware wraps the limiter)."""
+    # /api/v1/orders allows 10 per window: 12 requests -> 10 allowed, 2 blocked
+    for _ in range(12):
+        await async_client.get("/api/v1/orders")
+
+    entries = await _wait_for_stream_entries(redis_test_client, minimum=12)
+    assert len(entries) == 12
+    blocked = [f for _, f in entries if f["status_code"] == "429"]
+    allowed = [f for _, f in entries if f["status_code"] == "200"]
+    assert len(blocked) == 2
+    assert len(allowed) == 10
+    assert all(f["allowed"] == "False" for f in blocked)
+
+
+@pytest.mark.asyncio
+async def test_rate_limits_are_independent_per_route(async_client: AsyncClient) -> None:
+    """Traffic on one route must not consume another route's budget."""
+    for _ in range(10):
+        assert (await async_client.get("/api/v1/status")).status_code == 200
+
+    # Same client, different route: its own counter is still empty
+    first_orders = await async_client.get("/api/v1/orders")
+    assert first_orders.status_code == 200
+    assert first_orders.headers["X-RateLimit-Remaining"] == "9"
+
+    # ...while the route's own limit is still enforced
+    for _ in range(9):
+        await async_client.get("/api/v1/orders")
+    assert (await async_client.get("/api/v1/orders")).status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_spoofed_forwarded_header_ignored_by_default(async_client: AsyncClient) -> None:
+    """Without trusted proxies, rotating X-Forwarded-For must not evade the limit."""
+    statuses = [
+        (await async_client.get("/api/v1/orders", headers={"X-Forwarded-For": f"7.7.7.{i}"})).status_code
+        for i in range(15)
+    ]
+    assert statuses.count(200) == 10
+    assert statuses.count(429) == 5
+
+
+@pytest.mark.asyncio
+async def test_forwarded_header_honoured_from_trusted_proxy(
+    async_client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the peer is a trusted proxy, each forwarded client gets its own budget."""
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", "127.0.0.1")
+    statuses = [
+        (await async_client.get("/api/v1/orders", headers={"X-Forwarded-For": f"7.7.7.{i}"})).status_code
+        for i in range(15)
+    ]
+    assert statuses == [200] * 15
+
+
+def _request(peer: str, headers: dict) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+            "client": (peer, 1234),
+            "method": "GET",
+            "path": "/",
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "trusted, peer, headers, expected",
+    [
+        ("", "1.2.3.4", {"X-Forwarded-For": "9.9.9.9"}, "1.2.3.4"),  # untrusted: ignore
+        ("10.0.0.0/8", "5.5.5.5", {"X-Forwarded-For": "9.9.9.9"}, "5.5.5.5"),  # peer not a proxy
+        ("10.0.0.0/8", "10.0.0.1", {"X-Forwarded-For": "9.9.9.9"}, "9.9.9.9"),
+        # client-injected left entry is skipped; right-most untrusted hop wins
+        ("10.0.0.0/8", "10.0.0.1", {"X-Forwarded-For": "6.6.6.6, 8.8.8.8, 10.0.0.2"}, "8.8.8.8"),
+        ("10.0.0.0/8", "10.0.0.1", {"X-Forwarded-For": "not-an-ip"}, "10.0.0.1"),  # malformed
+        ("10.0.0.0/8", "10.0.0.1", {"X-Real-IP": "9.9.9.9"}, "9.9.9.9"),
+        ("10.0.0.0/8", "10.0.0.1", {"X-Real-IP": "garbage"}, "10.0.0.1"),
+        ("10.0.0.0/8", "10.0.0.1", {}, "10.0.0.1"),
+    ],
+)
+def test_extract_client_ip(
+    monkeypatch: pytest.MonkeyPatch, trusted: str, peer: str, headers: dict, expected: str
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", trusted)
+    middleware = RateLimiterMiddleware(app=lambda *a: None)
+    assert middleware._extract_client_ip(_request(peer, headers)) == expected

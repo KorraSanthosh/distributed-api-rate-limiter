@@ -1,11 +1,14 @@
+import ipaddress
 import time
 import uuid
 import logging
-from typing import Callable, Awaitable
+from functools import lru_cache
+from typing import Callable, Awaitable, Optional, Tuple, Union
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.core.config import settings
 from app.core.metrics import (
     HTTP_REQUESTS_TOTAL,
     HTTP_REQUESTS_BLOCKED_TOTAL,
@@ -16,6 +19,35 @@ from app.schemas.rate_limit import RateLimitErrorResponse, RateLimitErrorDetail
 from app.services.rate_limit_service import RateLimitService
 
 logger = logging.getLogger("app")
+
+IPNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
+
+
+@lru_cache(maxsize=8)
+def _parse_trusted_proxies(raw: str) -> Tuple[IPNetwork, ...]:
+    """Parses a comma-separated list of IPs/CIDRs, skipping invalid entries."""
+    networks = []
+    for item in raw.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(item, strict=False))
+        except ValueError:
+            logger.warning(f"Ignoring invalid TRUSTED_PROXIES entry: {item!r}")
+    return tuple(networks)
+
+
+def _parse_ip(value: str) -> Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]:
+    try:
+        return ipaddress.ip_address(value.strip())
+    except ValueError:
+        return None
+
+
+def _is_trusted(ip: str, networks: Tuple[IPNetwork, ...]) -> bool:
+    addr = _parse_ip(ip)
+    return addr is not None and any(addr in net for net in networks)
 
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
@@ -36,7 +68,10 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         request.state.client_ip = client_ip
 
         # Path bypass list (avoid rate limiting docs, metrics, and static assets)
-        bypass_paths = ["/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico"]
+        bypass_paths = [
+            "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
+            "/api/v1/analytics",  # dashboard polling: neither rate limited nor logged as traffic
+        ]
         endpoint = request.url.path
         method = request.method
 
@@ -168,20 +203,30 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         return response
 
     def _extract_client_ip(self, request: Request) -> str:
-        """Parses reverse proxy headers to retrieve the true client IP."""
-        # 1. Check X-Forwarded-For header chain
+        """Resolves the client IP, trusting proxy headers only from trusted proxies.
+
+        Forwarded headers are client-controlled unless set by a proxy we trust, so
+        they are ignored unless the socket peer is in TRUSTED_PROXIES. For
+        X-Forwarded-For the chain is walked right-to-left and the first address that
+        is not a trusted proxy is the client (anything left of it is spoofable).
+        """
+        peer = request.client.host if request.client else "127.0.0.1"
+        networks = _parse_trusted_proxies(settings.TRUSTED_PROXIES)
+        if not networks or not _is_trusted(peer, networks):
+            return peer
+
         x_forwarded_for = request.headers.get("X-Forwarded-For")
         if x_forwarded_for:
-            # First element represents the originating client IP address
-            return x_forwarded_for.split(",")[0].strip()
+            for hop in reversed(x_forwarded_for.split(",")):
+                hop = hop.strip()
+                if _parse_ip(hop) is None:
+                    return peer  # malformed chain: do not trust any of it
+                if not _is_trusted(hop, networks):
+                    return hop
+            return peer
 
-        # 2. Check X-Real-IP header
         x_real_ip = request.headers.get("X-Real-IP")
-        if x_real_ip:
+        if x_real_ip and _parse_ip(x_real_ip) is not None:
             return x_real_ip.strip()
 
-        # 3. Fallback to default client host
-        if request.client:
-            return request.client.host
-        
-        return "127.0.0.1"
+        return peer

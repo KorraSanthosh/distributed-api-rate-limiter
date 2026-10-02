@@ -17,6 +17,7 @@ from app.api.v1.status import router as status_router
 from app.api.v1.data import router as data_router
 from app.api.v1.users import router as users_router
 from app.api.v1.orders import router as orders_router
+from app.api.v1.analytics import router as analytics_router
 
 
 @asynccontextmanager
@@ -62,23 +63,24 @@ app = FastAPI(
 
 # ---------------------------------------------------------------------------
 # MIDDLEWARE REGISTRATION
-# Note: FastAPI processes middlewares in LIFO (Last-In-First-Out) order.
+# Note: add_middleware() makes the LAST registered middleware the OUTERMOST one.
 #
 # Execution Flow:
 # 1. Incoming Request -> AnalyticsMiddleware -> RateLimiterMiddleware -> Router
 # 2. Router Response -> RateLimiterMiddleware (adds limit headers) -> AnalyticsMiddleware (logs latency & status to Redis Stream) -> Client
 #
-# This ordering ensures that even if RateLimiterMiddleware blocks a request (429),
-# the AnalyticsMiddleware still intercepts the 429 response and pushes it to Redis.
+# AnalyticsMiddleware must be registered last (outermost) so that it also sees the
+# 429 responses short-circuited by RateLimiterMiddleware and pushes them to Redis.
 # ---------------------------------------------------------------------------
-app.add_middleware(AnalyticsMiddleware)
 app.add_middleware(RateLimiterMiddleware)
+app.add_middleware(AnalyticsMiddleware)
 
 # Include API v1 Routers
 app.include_router(status_router, prefix=settings.API_V1_STR, tags=["System Health"])
 app.include_router(data_router, prefix=settings.API_V1_STR, tags=["Metrics Data"])
 app.include_router(users_router, prefix=settings.API_V1_STR, tags=["Users Management"])
 app.include_router(orders_router, prefix=settings.API_V1_STR, tags=["Orders Processing"])
+app.include_router(analytics_router, prefix=settings.API_V1_STR, tags=["Analytics"])
 
 
 @app.get(

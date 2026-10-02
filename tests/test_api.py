@@ -71,3 +71,92 @@ async def test_api_orders_filtering(async_client: AsyncClient) -> None:
     data_status = response_status.json()
     assert data_status["count"] == 1
     assert data_status["orders"][0]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_analytics_summary_empty(async_client: AsyncClient) -> None:
+    """With no traffic, the summary is zeroed but well-formed (zero-filled time series)."""
+    response = await async_client.get("/api/v1/analytics/summary")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["total_requests"] == 0
+    assert data["blocked_requests"] == 0
+    assert data["block_rate_pct"] == 0.0
+    assert len(data["timeseries"]) > 0
+    assert data["recent"] == []
+
+
+@pytest.mark.asyncio
+async def test_analytics_summary_reflects_blocked_traffic(async_client: AsyncClient) -> None:
+    """Allowed and rate-limited requests are both aggregated correctly."""
+    import asyncio
+
+    for _ in range(12):  # /orders limit is 10 -> 2 blocked
+        await async_client.get("/api/v1/orders")
+    await asyncio.sleep(0.3)  # analytics are written by a background task
+
+    data = (await async_client.get("/api/v1/analytics/summary")).json()
+    assert data["total_requests"] == 12
+    assert data["allowed_requests"] == 10
+    assert data["blocked_requests"] == 2
+    assert data["block_rate_pct"] == pytest.approx(16.67, abs=0.01)
+    assert {s["status_code"]: s["count"] for s in data["status_codes"]} == {200: 10, 429: 2}
+    assert data["top_abusive_clients"][0]["blocked"] == 2
+    assert data["endpoints"][0]["endpoint"] == "/api/v1/orders"
+    assert data["endpoints"][0]["blocked"] == 2
+    assert len(data["recent"]) == 12
+    assert sum(p["blocked"] for p in data["timeseries"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_analytics_endpoint_is_not_rate_limited_or_logged(
+    async_client: AsyncClient,
+) -> None:
+    """Dashboard polling must neither be blocked nor pollute the traffic stream."""
+    import asyncio
+
+    for _ in range(80):  # well above any per-route limit
+        response = await async_client.get("/api/v1/analytics/summary")
+        assert response.status_code == 200
+        assert "X-RateLimit-Limit" not in response.headers
+    await asyncio.sleep(0.2)
+    assert (await async_client.get("/api/v1/analytics/summary")).json()["total_requests"] == 0
+
+
+@pytest.mark.asyncio
+async def test_analytics_summary_truncation_uses_covered_span(test_app, async_client: AsyncClient) -> None:
+    """When the read cap is hit, the rate is computed over the covered span, not the full window."""
+    import asyncio
+
+    for _ in range(10):
+        await async_client.get("/api/v1/orders")
+    await asyncio.sleep(0.3)
+
+    service = test_app.state.analytics_service
+    full = await service.summarize(window_seconds=60)
+    capped = await service.summarize(window_seconds=60, max_events=5)
+
+    assert full.window_truncated is False
+    assert full.effective_window_seconds == 60
+    assert capped.window_truncated is True
+    assert capped.total_requests == 5
+    assert capped.effective_window_seconds < 60
+    # 5 events over a ~1s span must read as a rate well above 5/60
+    assert capped.requests_per_second > 5 / 60 * 5
+
+
+@pytest.mark.asyncio
+async def test_analytics_summary_includes_system_health_without_logging_status_calls(
+    async_client: AsyncClient,
+) -> None:
+    """Dashboard health comes from the summary, so no /status traffic is generated or recorded."""
+    import asyncio
+
+    for _ in range(5):
+        data = (await async_client.get("/api/v1/analytics/summary")).json()
+    assert data["system"]["redis_connected"] is True
+    assert data["system"]["environment"] == "test"
+    assert data["system"]["version"]
+    await asyncio.sleep(0.2)
+    assert data["total_requests"] == 0
+    assert (await async_client.get("/api/v1/analytics/summary")).json()["recent"] == []

@@ -26,7 +26,10 @@ class AnalyticsMiddleware(BaseHTTPMiddleware):
         latency_ms = (time.perf_counter() - start_time) * 1000
 
         # Paths bypassed from telemetry dashboard ingestion to prevent noise
-        bypass_paths = ["/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico"]
+        bypass_paths = [
+            "/metrics", "/docs", "/redoc", "/openapi.json", "/favicon.ico",
+            "/api/v1/analytics",  # dashboard polling: neither rate limited nor logged as traffic
+        ]
         endpoint = request.url.path
 
         if any(endpoint.startswith(path) for path in bypass_paths):

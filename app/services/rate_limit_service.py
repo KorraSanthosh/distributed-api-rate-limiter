@@ -1,5 +1,5 @@
 import logging
-from typing import Dict
+from typing import Dict, Tuple
 
 from app.core.config import settings
 from app.models.domain import RateLimitPolicy, RateLimitResult
@@ -30,13 +30,17 @@ class RateLimitService:
         )
         logger.info("RateLimitService initialized with endpoint policies.")
 
-    def _resolve_policy(self, endpoint: str) -> RateLimitPolicy:
-        """Determines which rate limit policy governs the given endpoint."""
+    def _resolve_policy(self, endpoint: str) -> Tuple[str, RateLimitPolicy]:
+        """Determines which rate limit policy governs the given endpoint.
+
+        Returns the policy's route name along with the policy, so each route can
+        keep its own independent counter per client.
+        """
         # Simple prefix match to resolve policy. Handles dynamic paths like /api/v1/users/123
         for route, policy in self.policies.items():
             if endpoint.startswith(route):
-                return policy
-        return self.default_policy
+                return route, policy
+        return "default", self.default_policy
 
     async def evaluate_request(
         self, client_ip: str, endpoint: str, method: str, timestamp: float
@@ -52,8 +56,9 @@ class RateLimitService:
         Returns:
             RateLimitResult domain object.
         """
-        policy = self._resolve_policy(endpoint)
-        key = f"rate_limit:{client_ip}"
+        route, policy = self._resolve_policy(endpoint)
+        # One counter per (route policy, client) so routes do not consume each other's budget
+        key = f"rate_limit:{route}:{client_ip}"
 
         # Resolve burst limit (guaranteed fallback)
         burst = policy.burst_limit if policy.burst_limit is not None else int(policy.max_requests * 1.25)

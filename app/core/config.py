@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # The default burst limit (absolute ceiling for short spikes)
     RATE_LIMIT_BURST_LIMIT: int = 80
 
+    # Comma-separated IPs/CIDRs of reverse proxies whose X-Forwarded-For / X-Real-IP
+    # headers are trusted. Empty (default) = ignore those headers and use the socket peer.
+    TRUSTED_PROXIES: str = ""
+
     # Observability
     PROMETHEUS_PORT: int = 9000
     LOG_LEVEL: str = "INFO"

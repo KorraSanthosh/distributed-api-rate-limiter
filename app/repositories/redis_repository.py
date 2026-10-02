@@ -195,6 +195,19 @@ class RedisRepository:
             logger.error(f"Redis error reading from stream {stream_name}: {e}")
             return []
 
+    async def read_recent_analytics(
+        self, stream_name: str, count: int = 5000
+    ) -> List[Tuple[str, Dict[str, str]]]:
+        """Reads the newest `count` entries of a stream, returned oldest-first."""
+        try:
+            entries = await self.redis.xrevrange(stream_name, count=count)
+            REDIS_OPERATIONS_TOTAL.labels(operation="read_recent_analytics", status="success").inc()
+            return [(msg_id, fields) for msg_id, fields in reversed(entries)]
+        except RedisError as e:
+            REDIS_OPERATIONS_TOTAL.labels(operation="read_recent_analytics", status="failure").inc()
+            logger.error(f"Redis error reading recent entries from stream {stream_name}: {e}")
+            return []
+
     async def get_ttl(self, key: str) -> int:
         """Returns the TTL remaining (in seconds) for a key."""
         try:
