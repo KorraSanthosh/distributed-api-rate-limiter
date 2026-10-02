@@ -20,6 +20,20 @@ Every request passes through a sliding-window rate limiter backed by Redis, so l
 
 ---
 
+## 📸 Screenshots
+
+**Live dashboard**: KPI cards with sparklines, traffic history (allowed vs rate-limited), status split and system health.
+
+![Dashboard overview](docs/images/dashboard-overview.webp)
+
+**Blocked requests**: the client IPs behind every `429`, plus the live request stream.
+
+![Recently blocked requests and live request stream](docs/images/dashboard-blocked-requests.webp)
+
+> When the stack runs in Docker Desktop on a Mac, requests from your own machine appear as `192.168.65.1` (Docker's gateway address). (The `127.0.0.1` rows in the stream above are the container health check from before it was moved to `/metrics`; it no longer appears as traffic.) On a real server the true client IPs are shown.
+
+---
+
 ## 🧭 How it works
 
 ```
