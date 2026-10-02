@@ -72,3 +72,6 @@ class AnalyticsSummary(BaseModel):
     top_abusive_clients: List[AbusiveClient]
     endpoints: List[EndpointShare]
     recent: List[RequestAnalyticsLog]
+    recent_blocked: List[RequestAnalyticsLog] = Field(
+        ..., description="Newest blocked (429) requests, kept regardless of window or traffic volume."
+    )

@@ -8,6 +8,7 @@ import TrafficChart from "./components/TrafficChart.jsx";
 import StatusDonut from "./components/StatusDonut.jsx";
 import EndpointsPanel from "./components/EndpointsPanel.jsx";
 import ClientsPanel from "./components/ClientsPanel.jsx";
+import BlockedPanel from "./components/BlockedPanel.jsx";
 import LogTable from "./components/LogTable.jsx";
 import { ErrorBanner, Skeleton } from "./components/States.jsx";
 
@@ -78,6 +79,8 @@ export default function App() {
               <EndpointsPanel endpoints={data.endpoints} />
               <ClientsPanel clients={data.top_abusive_clients} />
             </div>
+
+            <BlockedPanel rows={data.recent_blocked ?? []} now={data.generated_at} />
 
             <LogTable rows={data.recent} />
           </>

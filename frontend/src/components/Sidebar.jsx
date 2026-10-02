@@ -1,10 +1,11 @@
-import { Activity, Gauge, ListTree, ScrollText, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Activity, Ban, Gauge, ListTree, ScrollText, ShieldAlert, ShieldCheck } from "lucide-react";
 
 const NAV = [
   { id: "overview", label: "Overview", icon: Gauge },
   { id: "traffic", label: "Traffic", icon: Activity },
   { id: "endpoints", label: "Endpoints", icon: ListTree },
   { id: "clients", label: "Abusive clients", icon: ShieldAlert },
+  { id: "blocked", label: "Blocked IPs", icon: Ban },
   { id: "log", label: "Live log", icon: ScrollText },
 ];
 

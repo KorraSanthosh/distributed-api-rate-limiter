@@ -160,3 +160,25 @@ async def test_analytics_summary_includes_system_health_without_logging_status_c
     await asyncio.sleep(0.2)
     assert data["total_requests"] == 0
     assert (await async_client.get("/api/v1/analytics/summary")).json()["recent"] == []
+
+
+@pytest.mark.asyncio
+async def test_recent_blocked_lists_blocked_clients_independent_of_window(
+    test_app, async_client: AsyncClient
+) -> None:
+    """Blocked requests (with client IP) stay listed even when the read cap hides them from the stream view."""
+    import asyncio
+
+    for _ in range(14):  # /orders limit is 10 -> 4 blocked
+        await async_client.get("/api/v1/orders")
+    for _ in range(40):  # newer, allowed traffic on another route
+        await async_client.get("/api/v1/data")
+    await asyncio.sleep(0.4)
+
+    service = test_app.state.analytics_service
+    capped = await service.summarize(window_seconds=60, max_events=10)  # sees only the newest 10 stream events
+    assert all(r.allowed for r in capped.recent)  # the live-log view contains no blocked rows...
+    assert len(capped.recent_blocked) == 4  # ...but the dedicated blocked feed still has all 4
+    assert all(r.status_code == 429 and not r.allowed for r in capped.recent_blocked)
+    assert capped.recent_blocked[0].client_ip  # IP is present
+    assert capped.recent_blocked[0].timestamp >= capped.recent_blocked[-1].timestamp  # newest first

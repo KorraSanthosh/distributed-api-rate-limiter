@@ -25,6 +25,7 @@ class AnalyticsService:
     def __init__(self, redis_repository: RedisRepository) -> None:
         self.redis_repo = redis_repository
         self.stream_name = "api_traffic_stream"
+        self.blocked_key = "api_blocked_events"
         # Short-lived cache so many dashboard viewers don't multiply the aggregation cost
         self._summary_cache: dict = {}
         self._summary_ttl = 1.0
@@ -42,6 +43,10 @@ class AnalyticsService:
             
             # Publish to Redis
             await self.redis_repo.publish_analytics(self.stream_name, payload)
+            # Blocked requests also go to a small capped list so they stay visible
+            # on the dashboard regardless of overall traffic volume or time window.
+            if not log_event.allowed:
+                await self.redis_repo.push_blocked_event(self.blocked_key, payload)
         except Exception as e:
             # Non-blocking failure: logs should not disrupt API flow
             logger.error(f"Failed to record analytics event to Redis Stream: {e}", exc_info=True)
@@ -100,6 +105,13 @@ class AnalyticsService:
             return cached[1]
 
         raw = await self.redis_repo.read_recent_analytics(self.stream_name, count=max_events)
+        blocked_raw = await self.redis_repo.read_blocked_events(self.blocked_key, count=25)
+        recent_blocked = []
+        for item in blocked_raw:
+            try:
+                recent_blocked.append(RequestAnalyticsLog.model_validate(item))
+            except Exception as e:
+                logger.warning(f"Skipping malformed blocked event: {e}")
         system = SystemHealth(
             redis_connected=await self.redis_repo.ping(),
             environment=settings.ENV,
@@ -108,7 +120,7 @@ class AnalyticsService:
         # CPU-bound aggregation runs in a worker thread so it never stalls the event loop
         # that is also serving rate-limited traffic.
         summary = await asyncio.to_thread(
-            self._aggregate, raw, system, window_seconds, history_seconds, bucket_seconds, max_events
+            self._aggregate, raw, system, recent_blocked, window_seconds, history_seconds, bucket_seconds, max_events
         )
         self._summary_cache[cache_key] = (time.time(), summary)
         return summary
@@ -117,6 +129,7 @@ class AnalyticsService:
         self,
         raw: List[Tuple[str, dict]],
         system: SystemHealth,
+        recent_blocked: List[RequestAnalyticsLog],
         window_seconds: int,
         history_seconds: int,
         bucket_seconds: int,
@@ -209,4 +222,5 @@ class AnalyticsService:
                 for ep, n in endpoint_totals.most_common()
             ],
             recent=[RequestAnalyticsLog(**e) for e in reversed(events[-25:])],
+            recent_blocked=recent_blocked,
         )

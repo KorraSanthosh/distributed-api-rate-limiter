@@ -1,3 +1,4 @@
+import json
 import time
 import logging
 from typing import Dict, List, Optional, Tuple, Any
@@ -193,6 +194,29 @@ class RedisRepository:
         except RedisError as e:
             REDIS_OPERATIONS_TOTAL.labels(operation="read_analytics", status="failure").inc()
             logger.error(f"Redis error reading from stream {stream_name}: {e}")
+            return []
+
+    async def push_blocked_event(self, key: str, data: Dict[str, Any], max_len: int = 50) -> None:
+        """Keeps the newest `max_len` blocked-request events in a capped Redis list (newest first)."""
+        try:
+            async with self.redis.pipeline(transaction=False) as pipe:
+                pipe.lpush(key, json.dumps(data))
+                pipe.ltrim(key, 0, max_len - 1)
+                await pipe.execute()
+            REDIS_OPERATIONS_TOTAL.labels(operation="push_blocked_event", status="success").inc()
+        except RedisError as e:
+            REDIS_OPERATIONS_TOTAL.labels(operation="push_blocked_event", status="failure").inc()
+            logger.error(f"Redis error pushing blocked event to {key}: {e}")
+
+    async def read_blocked_events(self, key: str, count: int = 25) -> List[Dict[str, Any]]:
+        """Returns up to `count` newest blocked-request events (newest first)."""
+        try:
+            raw = await self.redis.lrange(key, 0, count - 1)
+            REDIS_OPERATIONS_TOTAL.labels(operation="read_blocked_events", status="success").inc()
+            return [json.loads(item) for item in raw]
+        except (RedisError, ValueError) as e:
+            REDIS_OPERATIONS_TOTAL.labels(operation="read_blocked_events", status="failure").inc()
+            logger.error(f"Redis error reading blocked events from {key}: {e}")
             return []
 
     async def read_recent_analytics(

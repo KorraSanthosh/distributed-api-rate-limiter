@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import ipaddress
 import random
 import sys
 import time
@@ -17,11 +18,17 @@ ENDPOINTS = [
 
 
 def generate_fake_ips(count: int) -> List[str]:
-    """Generates a list of random fake client IP addresses."""
-    return [
-        f"{random.randint(1, 254)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
-        for _ in range(count)
-    ]
+    """Generates random public client IPs.
+
+    Private/reserved addresses are skipped: the gateway treats those as trusted proxies
+    (TRUSTED_PROXIES) and would not use them as the client identity.
+    """
+    ips: List[str] = []
+    while len(ips) < count:
+        ip = f"{random.randint(1, 254)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+        if ipaddress.ip_address(ip).is_global:
+            ips.append(ip)
+    return ips
 
 
 async def send_request(
@@ -130,7 +137,7 @@ async def run_traffic_simulator(args: argparse.Namespace) -> None:
         if args.mode in ("burst", "all"):
             # Periodically trigger bursts in the background
             async def burst_scheduler():
-                burst_ip = "192.168.99.99"
+                burst_ip = "203.0.113.99"  # public-looking (TEST-NET-3); private IPs would be treated as proxies
                 while not stop_event.is_set():
                     # Pick a high-value endpoint (e.g. orders)
                     target = "/api/v1/orders"

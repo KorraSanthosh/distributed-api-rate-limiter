@@ -14,7 +14,7 @@ Every request passes through a sliding-window rate limiter backed by Redis, so l
 *   **Spoof-resistant client IP**: `X-Forwarded-For` / `X-Real-IP` are only trusted from proxies you list in `TRUSTED_PROXIES`.
 *   **Fail-open**: if Redis is down, requests are still served and `/api/v1/status` reports `degraded`. The limiter recovers on its own when Redis returns.
 *   **Non-blocking analytics**: every request (including `429`s) is written to a **Redis Stream** by a background task, off the request path.
-*   **React dashboard**: live KPIs, traffic chart, status split, per-endpoint traffic, top abusive clients, and a live request table.
+*   **React dashboard**: live KPIs, traffic chart, status split, per-endpoint traffic, top abusive clients, a **recently blocked requests** feed (client IP, endpoint, time), and a live request table.
 *   **Prometheus exporter** at `/metrics`: request counters, blocked counters, latency histograms, Redis operation counters, and error counters.
 *   **Standard 429 responses**: `Retry-After` and `X-RateLimit-*` headers plus a JSON error body.
 
@@ -148,7 +148,7 @@ pytest -v --cov=app tests/
 | `GET /api/v1/data` | Paginated mock metrics (`page`, `limit`) | 60 (burst 80 / 2 s) |
 | `GET /api/v1/users` | Mock users (`role`, `is_active` filters) | 30 (burst 45 / 2 s) |
 | `GET /api/v1/orders` | Mock orders (`customer_id`, `status` filters) | 10 (burst 15 / 2 s) |
-| `GET /api/v1/analytics/summary` | Aggregated traffic stats for the dashboard (`window_seconds`) | not limited, not logged |
+| `GET /api/v1/analytics/summary` | Aggregated traffic stats for the dashboard, incl. the newest blocked requests (`window_seconds`) | not limited, not logged |
 | `GET /metrics` | Prometheus metrics | not limited |
 | `GET /docs` | Swagger UI | not limited |
 
