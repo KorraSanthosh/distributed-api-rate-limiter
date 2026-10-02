@@ -25,9 +25,11 @@ COPY app ./app
 # Expose API port
 EXPOSE 8000
 
-# Health check to ensure service is responding
+# Health check to ensure service is responding.
+# /metrics is exempt from rate limiting and analytics, so the probe neither uses a client's
+# rate-limit budget nor shows up as traffic on the dashboard.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/api/v1/status || exit 1
+  CMD curl -f http://localhost:8000/metrics || exit 1
 
 # Start FastAPI server using uvicorn.
 # --no-proxy-headers: client-IP resolution is handled by the app (TRUSTED_PROXIES),
